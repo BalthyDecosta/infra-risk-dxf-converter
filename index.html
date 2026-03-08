@@ -3,12 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Infra Risk DXF Converter</title>
+  <title>Infra Risk Converter</title>
 
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
     crossorigin=""
   />
 
@@ -22,7 +21,6 @@
       --muted:#9fb0ca;
       --border:#2a3650;
       --accent:#5ea2ff;
-      --accent2:#7fc2ff;
       --ok:#1c8d50;
       --warn:#b78206;
       --bad:#a93f3f;
@@ -40,7 +38,7 @@
     }
 
     .wrap{
-      max-width:1280px;
+      max-width:1320px;
       margin:0 auto;
     }
 
@@ -57,7 +55,7 @@
     }
 
     .card{
-      background:rgba(20,27,39,.92);
+      background:rgba(20,27,39,.94);
       border:1px solid var(--border);
       border-radius:16px;
       padding:18px;
@@ -67,8 +65,8 @@
 
     .row{
       display:flex;
-      gap:12px;
       flex-wrap:wrap;
+      gap:12px;
       align-items:center;
     }
 
@@ -78,14 +76,19 @@
       gap:12px;
     }
 
+    select,
     input[type="file"]{
-      width:100%;
-      max-width:420px;
       background:var(--panel2);
       color:var(--text);
       border:1px solid var(--border);
       border-radius:10px;
-      padding:10px;
+      padding:10px 12px;
+      font-size:14px;
+    }
+
+    input[type="file"]{
+      width:100%;
+      max-width:420px;
     }
 
     button{
@@ -101,14 +104,17 @@
     }
 
     button:hover{ transform:translateY(-1px); }
+
     button.secondary{
       background:#2b3750;
       color:var(--text);
     }
+
     button.ghost{
       background:#22304a;
       color:#d8e6ff;
     }
+
     button:disabled{
       opacity:.5;
       cursor:not-allowed;
@@ -192,22 +198,6 @@
       gap:16px;
     }
 
-    .panelInner{
-      background:var(--panel3);
-      border:1px solid var(--border);
-      border-radius:14px;
-      padding:14px;
-    }
-
-    #map{
-      width:100%;
-      height:420px;
-      border-radius:12px;
-      overflow:hidden;
-      border:1px solid var(--border);
-      background:#0a0f18;
-    }
-
     pre{
       margin:0;
       background:#090d14;
@@ -215,7 +205,7 @@
       border:1px solid var(--border);
       border-radius:12px;
       padding:16px;
-      max-height:500px;
+      max-height:520px;
       overflow:auto;
       white-space:pre-wrap;
       word-break:break-word;
@@ -292,6 +282,15 @@
       line-height:1.45;
     }
 
+    #map{
+      width:100%;
+      height:420px;
+      border-radius:12px;
+      overflow:hidden;
+      border:1px solid var(--border);
+      background:#0a0f18;
+    }
+
     @media (max-width: 980px){
       .twoCol{
         grid-template-columns:1fr;
@@ -305,16 +304,21 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Infra Risk DXF Converter</h1>
+    <h1>Infra Risk Converter</h1>
     <p class="lead">
-      DXF → JSON för Infra Risk. Läser POINT, LINE och LWPOLYLINE, analyserar koordinater,
-      listar lager och kan exportera både geografisk JSON och rå JSON.
+      Välj DXF eller GeoJSON. Verktyget läser filen, visar diagnos, lager, karta och exporterar till Infra Risk-format.
     </p>
 
     <div class="card stack">
       <div class="row">
-        <input type="file" id="fileInput" accept=".dxf" />
-        <button id="btnExportGeo" onclick="downloadGeoJSON()" disabled>Ladda ner WGS84 JSON</button>
+        <select id="inputMode">
+          <option value="dxf">DXF</option>
+          <option value="geojson">GIS / GeoJSON</option>
+        </select>
+
+        <input type="file" id="fileInput" accept=".dxf,.json,.geojson" />
+
+        <button id="btnExportGeo" onclick="downloadGeoJSON()" disabled>Ladda ner Infra Risk JSON</button>
         <button id="btnExportRaw" class="ghost" onclick="downloadRawJSON()" disabled>Ladda ner rå JSON</button>
         <button class="secondary" onclick="clearAll()">Rensa</button>
       </div>
@@ -323,27 +327,27 @@
 
       <div class="grid" id="statsGrid" style="display:none;">
         <div class="mini"><div class="label">Fil</div><div class="value" id="statFile">-</div></div>
+        <div class="mini"><div class="label">Läge</div><div class="value" id="statMode">-</div></div>
         <div class="mini"><div class="label">Objekt totalt</div><div class="value" id="statFeatures">0</div></div>
-        <div class="mini"><div class="label">POINT</div><div class="value" id="statPoints">0</div></div>
-        <div class="mini"><div class="label">LINE</div><div class="value" id="statLines">0</div></div>
-        <div class="mini"><div class="label">LWPOLYLINE</div><div class="value" id="statPolys">0</div></div>
+        <div class="mini"><div class="label">Point</div><div class="value" id="statPoints">0</div></div>
+        <div class="mini"><div class="label">Line</div><div class="value" id="statLines">0</div></div>
+        <div class="mini"><div class="label">Polygon</div><div class="value" id="statPolygons">0</div></div>
         <div class="mini"><div class="label">Lager</div><div class="value" id="statLayers">0</div></div>
-        <div class="mini"><div class="label">Min X</div><div class="value" id="statMinX">-</div></div>
-        <div class="mini"><div class="label">Max X</div><div class="value" id="statMaxX">-</div></div>
-        <div class="mini"><div class="label">Min Y</div><div class="value" id="statMinY">-</div></div>
-        <div class="mini"><div class="label">Max Y</div><div class="value" id="statMaxY">-</div></div>
+        <div class="mini"><div class="label">Min X / Lon</div><div class="value" id="statMinX">-</div></div>
+        <div class="mini"><div class="label">Max X / Lon</div><div class="value" id="statMaxX">-</div></div>
+        <div class="mini"><div class="label">Min Y / Lat</div><div class="value" id="statMinY">-</div></div>
+        <div class="mini"><div class="label">Max Y / Lat</div><div class="value" id="statMaxY">-</div></div>
         <div class="mini"><div class="label">Bedömning</div><div class="value" id="statAssessment">-</div></div>
       </div>
 
-      <div class="hint">
-        Tumregel: SWEREF 99 TM brukar ungefär ligga inom X = 150000–1000000 och Y = 6000000–8000000.
-        Ligger ritningen istället nära 0–100000 är det ofta en vanlig CAD-ritning i lokal nolla eller millimeter.
+      <div class="hint" id="modeHint">
+        DXF-läge: POINT, LINE och LWPOLYLINE stöds. GeoJSON-läge: Point, LineString, MultiLineString, Polygon, MultiPolygon.
       </div>
     </div>
 
     <div class="twoCol">
       <div class="card">
-        <div class="sectionTitle">Lager / layers</div>
+        <div class="sectionTitle">Lager / grupper</div>
 
         <div class="toolbar">
           <button class="ghost" onclick="selectAllLayers(true)" disabled id="btnSelectAll">Markera alla</button>
@@ -355,7 +359,7 @@
         <div id="layerContainer" class="layerList"></div>
 
         <div class="footerNote">
-          Du kan filtrera vilka lager som ska med i exporten. Rå JSON kan exporteras även om ritningen inte är geografisk.
+          För DXF används layer. För GeoJSON används i första hand <code>layer</code>, annars <code>source</code>, annars <code>type</code>.
         </div>
       </div>
 
@@ -363,7 +367,7 @@
         <div class="sectionTitle">Kartförhandsvisning</div>
         <div id="map"></div>
         <div class="footerNote">
-          Kartan visas bara när koordinaterna ser rimliga ut för SWEREF 99 TM och kan konverteras till WGS84.
+          GeoJSON visas direkt. DXF visas på karta bara om filen verkar ligga i SWEREF 99 TM och kan konverteras till WGS84.
         </div>
       </div>
     </div>
@@ -372,14 +376,13 @@
       <div class="sectionTitle">JSON-resultat</div>
       <pre id="output">Ingen fil läst ännu.</pre>
       <div class="small" style="margin-top:10px;">
-        WGS84-export kräver att koordinaterna ser ut som SWEREF 99 TM. Rå export fungerar alltid när parsern hittat objekt.
+        Infra Risk JSON försöker normalisera olika indata till ett enklare punkt/linje/polygon-format.
       </div>
     </div>
   </div>
 
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""
   ></script>
 
@@ -387,16 +390,24 @@
     let map;
     let mapLayerGroup;
 
+    let currentFileName = "";
+    let currentMode = "dxf";
+    let currentAssessment = "";
+    let currentCanGeoExport = false;
+
     let allParsedFeatures = [];
     let filteredFeatures = [];
-    let convertedGeoResult = [];
     let rawExportResult = [];
-    let currentFileName = "";
-    let currentAssessment = "";
-    let currentLooksSweref = false;
+    let convertedGeoResult = [];
     let layerStats = new Map();
 
     initMap();
+
+    document.getElementById("inputMode").addEventListener("change", function(){
+      currentMode = this.value;
+      updateModeHint();
+      clearAll();
+    });
 
     document.getElementById("fileInput").addEventListener("change", async function(e){
       const file = e.target.files[0];
@@ -406,14 +417,28 @@
       resetStateForNewFile();
       document.getElementById("output").textContent = "Läser fil...";
 
-      try {
+      try{
         const text = await file.text();
-        parseDXF(text, currentFileName);
-      } catch (err) {
+
+        if (currentMode === "dxf") {
+          parseDXF(text, file.name);
+        } else if (currentMode === "geojson") {
+          parseGeoJSON(text, file.name);
+        }
+      } catch(err) {
         setStatus("bad", "<strong>Fel:</strong> kunde inte läsa filen.");
         document.getElementById("output").textContent = String(err);
       }
     });
+
+    function updateModeHint(){
+      const hint = document.getElementById("modeHint");
+      if (currentMode === "dxf") {
+        hint.textContent = "DXF-läge: POINT, LINE och LWPOLYLINE stöds. Filen valideras mot SWEREF 99 TM innan geografisk export.";
+      } else {
+        hint.textContent = "GeoJSON-läge: Point, LineString, MultiLineString, Polygon, MultiPolygon stöds. Antas redan vara i WGS84.";
+      }
+    }
 
     function initMap(){
       map = L.map("map", { zoomControl: true }).setView([62.0, 15.0], 5);
@@ -433,18 +458,17 @@
     function resetStateForNewFile(){
       allParsedFeatures = [];
       filteredFeatures = [];
-      convertedGeoResult = [];
       rawExportResult = [];
-      currentAssessment = "";
-      currentLooksSweref = false;
+      convertedGeoResult = [];
       layerStats = new Map();
+      currentAssessment = "";
+      currentCanGeoExport = false;
 
       document.getElementById("btnExportGeo").disabled = true;
       document.getElementById("btnExportRaw").disabled = true;
       document.getElementById("btnSelectAll").disabled = true;
       document.getElementById("btnSelectNone").disabled = true;
       document.getElementById("btnRefresh").disabled = true;
-
       document.getElementById("statsGrid").style.display = "none";
       document.getElementById("layerContainer").innerHTML = "";
       document.getElementById("layerPills").innerHTML = "";
@@ -459,10 +483,11 @@
       document.getElementById("output").textContent = "Ingen fil läst ännu.";
 
       setStat("statFile", "-");
+      setStat("statMode", "-");
       setStat("statFeatures", "0");
       setStat("statPoints", "0");
       setStat("statLines", "0");
-      setStat("statPolys", "0");
+      setStat("statPolygons", "0");
       setStat("statLayers", "0");
       setStat("statMinX", "-");
       setStat("statMaxX", "-");
@@ -490,7 +515,7 @@
 
     function formatNum(v){
       if (!Number.isFinite(v)) return "-";
-      return Number(v).toFixed(3);
+      return Number(v).toFixed(6);
     }
 
     function swerefToWGS84Approx(x, y){
@@ -503,6 +528,26 @@
       const xOk = minX >= 150000 && maxX <= 1000000;
       const yOk = minY >= 6000000 && maxY <= 8000000;
       return xOk && yOk;
+    }
+
+    function addLayerCount(layerName){
+      const key = (layerName || "0").trim() || "0";
+      layerStats.set(key, (layerStats.get(key) || 0) + 1);
+    }
+
+    function detectFeatureGroup(props, fallback = "default"){
+      if (!props || typeof props !== "object") return fallback;
+      return (
+        props.layer ||
+        props.LAYER ||
+        props.source ||
+        props.SOURCE ||
+        props.category ||
+        props.CATEGORY ||
+        props.type ||
+        props.TYPE ||
+        fallback
+      );
     }
 
     function parseDXF(text, fileName){
@@ -528,19 +573,10 @@
 
       function readLayer(startIndex, limit){
         for (let j = startIndex; j < Math.min(lines.length - 1, startIndex + limit); j++) {
-          if (lines[j] === "8") {
-            return lines[j + 1] || "0";
-          }
-          if (j > startIndex && lines[j] === "0") {
-            break;
-          }
+          if (lines[j] === "8") return lines[j + 1] || "0";
+          if (j > startIndex && lines[j] === "0") break;
         }
         return "0";
-      }
-
-      function addLayerCount(layerName){
-        const key = (layerName || "0").trim() || "0";
-        layerStats.set(key, (layerStats.get(key) || 0) + 1);
       }
 
       for (let i = 0; i < lines.length; i++) {
@@ -563,7 +599,8 @@
             addLayerCount(layer);
             allParsedFeatures.push({
               type: "point",
-              layer,
+              group: layer,
+              properties: { layer },
               sourceX: x,
               sourceY: y
             });
@@ -589,7 +626,8 @@
             addLayerCount(layer);
             allParsedFeatures.push({
               type: "line",
-              layer,
+              group: layer,
+              properties: { layer },
               sourceCoordinates: [
                 { x: x1, y: y1 },
                 { x: x2, y: y2 }
@@ -614,9 +652,7 @@
                   y = parseFloat(lines[k + 1]);
                   break;
                 }
-                if (lines[k] === "10" || lines[k] === "0") {
-                  break;
-                }
+                if (lines[k] === "10" || lines[k] === "0") break;
               }
 
               if (Number.isFinite(x) && Number.isFinite(y)) {
@@ -627,75 +663,210 @@
           }
 
           if (coords.length >= 2) {
-            polyCount++;
+            lineCount++;
             addLayerCount(layer);
             allParsedFeatures.push({
               type: "polyline",
-              layer,
+              group: layer,
+              properties: { layer },
               sourceCoordinates: coords
             });
           }
         }
       }
 
-      if (!allParsedFeatures.length) {
-        document.getElementById("statsGrid").style.display = "grid";
-        setStat("statFile", fileName);
-        setStat("statFeatures", "0");
-        setStat("statPoints", "0");
-        setStat("statLines", "0");
-        setStat("statPolys", "0");
-        setStat("statLayers", "0");
-        setStat("statMinX", "-");
-        setStat("statMaxX", "-");
-        setStat("statMinY", "-");
-        setStat("statMaxY", "-");
-        setStat("statAssessment", "Inget hittat");
+      finalizeDXFStats(fileName, pointCount, lineCount, polyCount, minX, maxX, minY, maxY);
+    }
 
-        setStatus("bad", "Inga stödda objekt hittades. Testa en DXF som innehåller POINT, LINE eller LWPOLYLINE.");
-        document.getElementById("output").textContent = "[]";
+    function finalizeDXFStats(fileName, pointCount, lineCount, polyCount, minX, maxX, minY, maxY){
+      if (!allParsedFeatures.length) {
+        showEmptyState(fileName, "DXF", "Inga stödda objekt hittades.");
         return;
       }
 
-      currentLooksSweref = looksLikeSweref99TM(minX, maxX, minY, maxY);
-      currentAssessment = currentLooksSweref ? "Ser ut som SWEREF 99 TM" : "Ser INTE ut som SWEREF 99 TM";
+      const looksSweref = looksLikeSweref99TM(minX, maxX, minY, maxY);
+      currentCanGeoExport = looksSweref;
+      currentAssessment = looksSweref ? "Ser ut som SWEREF 99 TM" : "Ser INTE ut som SWEREF 99 TM";
 
-      document.getElementById("statsGrid").style.display = "grid";
-      setStat("statFile", fileName);
-      setStat("statFeatures", String(allParsedFeatures.length));
-      setStat("statPoints", String(pointCount));
-      setStat("statLines", String(lineCount));
-      setStat("statPolys", String(polyCount));
-      setStat("statLayers", String(layerStats.size));
-      setStat("statMinX", formatNum(minX));
-      setStat("statMaxX", formatNum(maxX));
-      setStat("statMinY", formatNum(minY));
-      setStat("statMaxY", formatNum(maxY));
-      setStat("statAssessment", currentAssessment);
+      showStats(fileName, "DXF", allParsedFeatures.length, pointCount, lineCount, polyCount, layerStats.size, minX, maxX, minY, maxY, currentAssessment);
 
-      buildLayerUI();
-
-      document.getElementById("btnExportRaw").disabled = false;
-      document.getElementById("btnSelectAll").disabled = false;
-      document.getElementById("btnSelectNone").disabled = false;
-      document.getElementById("btnRefresh").disabled = false;
-
-      if (currentLooksSweref) {
+      if (looksSweref) {
         setStatus(
           "ok",
-          "<strong>OK:</strong> filen ser ut att ligga inom rimligt område för SWEREF 99 TM.<br>" +
-          "WGS84-export och kartförhandsvisning är aktiverade."
+          "<strong>OK:</strong> DXF-filen verkar ligga inom rimligt område för SWEREF 99 TM. Infra Risk-export och karta är aktiverade."
         );
       } else {
         setStatus(
           "bad",
-          "<strong>Varning:</strong> filen verkar inte vara i SWEREF 99 TM.<br>" +
-          "Detta ser mer ut som en vanlig CAD-ritning med lokal nolla eller millimeter.<br><br>" +
-          "<strong>Exempel:</strong> verkstadsritning, rullbana, maskindetalj eller layoutskiss."
+          "<strong>Varning:</strong> DXF-filen verkar inte vara i SWEREF 99 TM.<br>Detta ser mer ut som lokal CAD-ritning eller millimeterbaserad verkstadsritning."
         );
       }
 
+      buildLayerUI();
+      enableFilterButtons();
       refreshFilteredOutput();
+    }
+
+    function parseGeoJSON(text, fileName){
+      let parsed;
+      try{
+        parsed = JSON.parse(text);
+      } catch(err) {
+        setStatus("bad", "<strong>Fel:</strong> filen är inte giltig JSON.");
+        document.getElementById("output").textContent = String(err);
+        return;
+      }
+
+      if (!parsed || parsed.type !== "FeatureCollection" || !Array.isArray(parsed.features)) {
+        setStatus("bad", "<strong>Fel:</strong> GeoJSON måste vara en FeatureCollection.");
+        document.getElementById("output").textContent = JSON.stringify(parsed, null, 2);
+        return;
+      }
+
+      let pointCount = 0;
+      let lineCount = 0;
+      let polyCount = 0;
+
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+
+      function trackLonLat(lon, lat){
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+        if (lon < minX) minX = lon;
+        if (lon > maxX) maxX = lon;
+        if (lat < minY) minY = lat;
+        if (lat > maxY) maxY = lat;
+      }
+
+      function addPoint(group, props, lon, lat){
+        pointCount++;
+        addLayerCount(group);
+        trackLonLat(lon, lat);
+        allParsedFeatures.push({
+          type: "point",
+          group,
+          properties: props || {},
+          lon,
+          lat
+        });
+      }
+
+      function addLine(group, props, coords){
+        if (!coords || coords.length < 2) return;
+        lineCount++;
+        addLayerCount(group);
+        coords.forEach(c => trackLonLat(c[0], c[1]));
+        allParsedFeatures.push({
+          type: "line",
+          group,
+          properties: props || {},
+          coordinates: coords.map(c => ({ lon: c[0], lat: c[1] }))
+        });
+      }
+
+      function addPolygon(group, props, rings){
+        if (!rings || !rings.length) return;
+        polyCount++;
+        addLayerCount(group);
+        rings.forEach(ring => ring.forEach(c => trackLonLat(c[0], c[1])));
+        allParsedFeatures.push({
+          type: "polygon",
+          group,
+          properties: props || {},
+          rings: rings.map(ring => ring.map(c => ({ lon: c[0], lat: c[1] })))
+        });
+      }
+
+      for (const feature of parsed.features) {
+        if (!feature || feature.type !== "Feature" || !feature.geometry) continue;
+
+        const props = feature.properties || {};
+        const group = detectFeatureGroup(props, "geojson");
+        const geom = feature.geometry;
+
+        if (geom.type === "Point" && Array.isArray(geom.coordinates) && geom.coordinates.length >= 2) {
+          addPoint(group, props, geom.coordinates[0], geom.coordinates[1]);
+        }
+
+        else if (geom.type === "LineString" && Array.isArray(geom.coordinates)) {
+          addLine(group, props, geom.coordinates);
+        }
+
+        else if (geom.type === "MultiLineString" && Array.isArray(geom.coordinates)) {
+          for (const line of geom.coordinates) addLine(group, props, line);
+        }
+
+        else if (geom.type === "Polygon" && Array.isArray(geom.coordinates)) {
+          addPolygon(group, props, geom.coordinates);
+        }
+
+        else if (geom.type === "MultiPolygon" && Array.isArray(geom.coordinates)) {
+          for (const poly of geom.coordinates) addPolygon(group, props, poly);
+        }
+      }
+
+      if (!allParsedFeatures.length) {
+        showEmptyState(fileName, "GeoJSON", "Inga stödda geometrier hittades.");
+        return;
+      }
+
+      currentCanGeoExport = true;
+      currentAssessment = "GeoJSON antas redan vara WGS84";
+
+      showStats(fileName, "GeoJSON", allParsedFeatures.length, pointCount, lineCount, polyCount, layerStats.size, minX, maxX, minY, maxY, currentAssessment);
+
+      setStatus(
+        "ok",
+        "<strong>OK:</strong> GeoJSON läst. Infra Risk-export och kartförhandsvisning är aktiverade."
+      );
+
+      buildLayerUI();
+      enableFilterButtons();
+      refreshFilteredOutput();
+    }
+
+    function showEmptyState(fileName, modeLabel, message){
+      document.getElementById("statsGrid").style.display = "grid";
+      setStat("statFile", fileName);
+      setStat("statMode", modeLabel);
+      setStat("statFeatures", "0");
+      setStat("statPoints", "0");
+      setStat("statLines", "0");
+      setStat("statPolygons", "0");
+      setStat("statLayers", "0");
+      setStat("statMinX", "-");
+      setStat("statMaxX", "-");
+      setStat("statMinY", "-");
+      setStat("statMaxY", "-");
+      setStat("statAssessment", "Inget hittat");
+
+      setStatus("bad", message);
+      document.getElementById("output").textContent = "[]";
+    }
+
+    function showStats(fileName, modeLabel, features, points, lines, polygons, layers, minX, maxX, minY, maxY, assessment){
+      document.getElementById("statsGrid").style.display = "grid";
+      setStat("statFile", fileName);
+      setStat("statMode", modeLabel);
+      setStat("statFeatures", String(features));
+      setStat("statPoints", String(points));
+      setStat("statLines", String(lines));
+      setStat("statPolygons", String(polygons));
+      setStat("statLayers", String(layers));
+      setStat("statMinX", formatNum(minX));
+      setStat("statMaxX", formatNum(maxX));
+      setStat("statMinY", formatNum(minY));
+      setStat("statMaxY", formatNum(maxY));
+      setStat("statAssessment", assessment);
+    }
+
+    function enableFilterButtons(){
+      document.getElementById("btnExportRaw").disabled = false;
+      document.getElementById("btnSelectAll").disabled = false;
+      document.getElementById("btnSelectNone").disabled = false;
+      document.getElementById("btnRefresh").disabled = false;
     }
 
     function buildLayerUI(){
@@ -704,11 +875,9 @@
       container.innerHTML = "";
       pills.innerHTML = "";
 
-      const entries = Array.from(layerStats.entries()).sort((a,b) => {
-        return a[0].localeCompare(b[0], "sv");
-      });
+      const entries = Array.from(layerStats.entries()).sort((a,b) => a[0].localeCompare(b[0], "sv"));
 
-      entries.forEach(([layerName, count], idx) => {
+      entries.forEach(([layerName, count]) => {
         const pill = document.createElement("span");
         pill.className = "pill";
         pill.textContent = `${layerName} (${count})`;
@@ -721,7 +890,6 @@
         checkbox.type = "checkbox";
         checkbox.checked = true;
         checkbox.dataset.layer = layerName;
-        checkbox.addEventListener("change", () => {});
 
         const meta = document.createElement("div");
         meta.className = "layerMeta";
@@ -758,9 +926,14 @@
     function refreshFilteredOutput(){
       const selectedLayers = new Set(getSelectedLayers());
 
-      filteredFeatures = allParsedFeatures.filter(f => selectedLayers.has(f.layer));
+      filteredFeatures = allParsedFeatures.filter(f => selectedLayers.has(f.group));
       rawExportResult = buildRawResult(filteredFeatures);
-      convertedGeoResult = currentLooksSweref ? buildGeoResult(filteredFeatures) : [];
+
+      if (currentMode === "dxf") {
+        convertedGeoResult = currentCanGeoExport ? buildGeoResultFromDXF(filteredFeatures) : [];
+      } else {
+        convertedGeoResult = buildGeoResultFromGeoJSON(filteredFeatures);
+      }
 
       if (!filteredFeatures.length) {
         document.getElementById("btnExportGeo").disabled = true;
@@ -776,79 +949,126 @@
 
       document.getElementById("btnExportRaw").disabled = false;
 
-      if (currentLooksSweref) {
-        document.getElementById("btnExportGeo").disabled = false;
-        document.getElementById("output").textContent = JSON.stringify(convertedGeoResult, null, 2);
-        renderMap(convertedGeoResult);
-      } else {
+      if (currentMode === "dxf" && !currentCanGeoExport) {
         document.getElementById("btnExportGeo").disabled = true;
         document.getElementById("output").textContent = JSON.stringify({
           file: currentFileName,
+          mode: "DXF",
           status: "invalid_coordinate_system",
-          message: "DXF verkar inte vara i SWEREF 99 TM. WGS84 JSON exporteras inte.",
+          message: "DXF verkar inte vara i SWEREF 99 TM. Infra Risk-export blockeras.",
           selectedLayers: Array.from(selectedLayers),
-          detectedEntities: {
-            total: filteredFeatures.length,
-            pointCount: filteredFeatures.filter(f => f.type === "point").length,
-            lineCount: filteredFeatures.filter(f => f.type === "line").length,
-            polyCount: filteredFeatures.filter(f => f.type === "polyline").length
-          },
-          rawPreview: rawExportResult.slice(0, 25),
-          hint: "Använd rå JSON eller testa en geografisk DXF från t.ex. ledningsdata/projektering."
+          rawPreview: rawExportResult.slice(0, 25)
         }, null, 2);
         clearMap();
+        return;
       }
+
+      document.getElementById("btnExportGeo").disabled = false;
+      document.getElementById("output").textContent = JSON.stringify(convertedGeoResult, null, 2);
+      renderMap(convertedGeoResult);
     }
 
     function buildRawResult(features){
       return features.map(f => {
-        if (f.type === "point") {
+        if (currentMode === "dxf") {
+          if (f.type === "point") {
+            return {
+              type: "point",
+              group: f.group,
+              x: f.sourceX,
+              y: f.sourceY
+            };
+          }
           return {
-            type: "point",
-            layer: f.layer,
-            x: f.sourceX,
-            y: f.sourceY
+            type: f.type,
+            group: f.group,
+            coordinates: f.sourceCoordinates.map(p => ({ x: p.x, y: p.y }))
           };
         }
 
-        return {
-          type: f.type,
-          layer: f.layer,
-          coordinates: f.sourceCoordinates.map(p => ({ x: p.x, y: p.y }))
-        };
-      });
-    }
-
-    function buildGeoResult(features){
-      return features.map(f => {
         if (f.type === "point") {
-          const c = swerefToWGS84Approx(f.sourceX, f.sourceY);
           return {
             type: "point",
-            layer: f.layer,
-            lat: c.lat,
-            lon: c.lon
+            group: f.group,
+            lon: f.lon,
+            lat: f.lat,
+            properties: f.properties
           };
         }
 
         if (f.type === "line") {
           return {
             type: "line",
-            layer: f.layer,
-            coordinates: f.sourceCoordinates.map(p => {
-              const c = swerefToWGS84Approx(p.x, p.y);
-              return { lat: c.lat, lon: c.lon };
-            })
+            group: f.group,
+            coordinates: f.coordinates,
+            properties: f.properties
           };
         }
 
         return {
-          type: "polyline",
-          layer: f.layer,
+          type: "polygon",
+          group: f.group,
+          rings: f.rings,
+          properties: f.properties
+        };
+      });
+    }
+
+    function buildGeoResultFromDXF(features){
+      return features.map(f => {
+        if (f.type === "point") {
+          const c = swerefToWGS84Approx(f.sourceX, f.sourceY);
+          return {
+            type: "point",
+            layer: f.group,
+            lat: c.lat,
+            lon: c.lon
+          };
+        }
+
+        return {
+          type: (f.type === "polyline" ? "polyline" : "line"),
+          layer: f.group,
           coordinates: f.sourceCoordinates.map(p => {
             const c = swerefToWGS84Approx(p.x, p.y);
             return { lat: c.lat, lon: c.lon };
           })
+        };
+      });
+    }
+
+    function buildGeoResultFromGeoJSON(features){
+      return features.map(f => {
+        if (f.type === "point") {
+          return {
+            type: "point",
+            layer: f.group,
+            lat: f.lat,
+            lon: f.lon,
+            properties: f.properties
+          };
+        }
+
+        if (f.type === "line") {
+          return {
+            type: "line",
+            layer: f.group,
+            coordinates: f.coordinates.map(c => ({
+              lat: c.lat,
+              lon: c.lon
+            })),
+            properties: f.properties
+          };
+        }
+
+        return {
+          type: "polygon",
+          layer: f.group,
+          rings: f.rings.map(ring => ring.map(c => ({
+            lat: c.lat,
+            lon: c.lon
+          }))),
+          properties: f.properties
         };
       });
     }
@@ -859,7 +1079,8 @@
       const bounds = [];
       const layerColors = {};
       const palette = [
-        "#5ea2ff","#7ad3ff","#7df0c4","#f8c95d","#ff9d6c","#ff7f9f","#c59cff","#9dff93"
+        "#5ea2ff","#7ad3ff","#7df0c4","#f8c95d",
+        "#ff9d6c","#ff7f9f","#c59cff","#9dff93"
       ];
 
       function getColor(layerName){
@@ -876,35 +1097,49 @@
           const latlng = [f.lat, f.lon];
           bounds.push(latlng);
 
-          const marker = L.circleMarker(latlng, {
+          L.circleMarker(latlng, {
             radius: 5,
             color,
             weight: 2,
             fillColor: color,
             fillOpacity: 0.85
-          });
+          })
+          .bindPopup(`<strong>${escapeHtml(f.layer || "0")}</strong><br>POINT`)
+          .addTo(mapLayerGroup);
+        }
 
-          marker.bindPopup(
-            `<strong>${escapeHtml(f.layer || "0")}</strong><br>POINT<br>Lat: ${f.lat.toFixed(6)}<br>Lon: ${f.lon.toFixed(6)}`
-          );
-          marker.addTo(mapLayerGroup);
-        } else {
+        else if (f.type === "line" || f.type === "polyline") {
           const latlngs = f.coordinates.map(c => {
             const ll = [c.lat, c.lon];
             bounds.push(ll);
             return ll;
           });
 
-          const poly = L.polyline(latlngs, {
+          L.polyline(latlngs, {
             color,
-            weight: f.type === "line" ? 3 : 2,
+            weight: 3,
             opacity: 0.9
-          });
+          })
+          .bindPopup(`<strong>${escapeHtml(f.layer || "0")}</strong><br>${escapeHtml(f.type.toUpperCase())}`)
+          .addTo(mapLayerGroup);
+        }
 
-          poly.bindPopup(
-            `<strong>${escapeHtml(f.layer || "0")}</strong><br>${escapeHtml(f.type.toUpperCase())}<br>Punkter: ${latlngs.length}`
-          );
-          poly.addTo(mapLayerGroup);
+        else if (f.type === "polygon") {
+          const rings = (f.rings || []).map(ring => ring.map(c => {
+            const ll = [c.lat, c.lon];
+            bounds.push(ll);
+            return ll;
+          }));
+
+          if (rings.length) {
+            L.polygon(rings, {
+              color,
+              weight: 2,
+              fillOpacity: 0.18
+            })
+            .bindPopup(`<strong>${escapeHtml(f.layer || "0")}</strong><br>POLYGON`)
+            .addTo(mapLayerGroup);
+          }
         }
       });
 
@@ -933,14 +1168,14 @@
     }
 
     function downloadGeoJSON(){
-      if (!convertedGeoResult.length || !currentLooksSweref) return;
-      const safeName = currentFileName.replace(/\.dxf$/i, "") || "infra-risk";
-      downloadTextFile(`${safeName}-wgs84.json`, JSON.stringify(convertedGeoResult, null, 2));
+      if (!convertedGeoResult.length) return;
+      const safeName = currentFileName.replace(/\.[^/.]+$/, "") || "infra-risk";
+      downloadTextFile(`${safeName}-infra-risk.json`, JSON.stringify(convertedGeoResult, null, 2));
     }
 
     function downloadRawJSON(){
       if (!rawExportResult.length) return;
-      const safeName = currentFileName.replace(/\.dxf$/i, "") || "infra-risk";
+      const safeName = currentFileName.replace(/\.[^/.]+$/, "") || "infra-risk";
       downloadTextFile(`${safeName}-raw.json`, JSON.stringify(rawExportResult, null, 2));
     }
   </script>

@@ -411,13 +411,7 @@ function swerefToWGS84(x, y){
     lat: result[1]
   };
 }
-console.log("TEST PROJ4:",
-  proj4("EPSG:3006","EPSG:4326",[706219.420565,6616964.944322])
-);
 
-console.log("TEST FUNKTION:",
-  swerefToWGS84(706219.420565,6616964.944322)
-);
 function wgs84ToSweref(lat, lon){
   const result = proj4("EPSG:4326", "EPSG:3006", [lon, lat]);
   return {

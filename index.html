@@ -296,6 +296,7 @@
       }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -398,7 +399,26 @@
     let rawExportResult = [];
     let infraExportResult = [];
     let layerStats = new Map();
+proj4.defs(
+  "EPSG:3006",
+  "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+);
 
+function swerefToWGS84(x, y){
+  const result = proj4("EPSG:3006", "EPSG:4326", [x, y]);
+  return {
+    lon: result[0],
+    lat: result[1]
+  };
+}
+
+function wgs84ToSweref(lat, lon){
+  const result = proj4("EPSG:4326", "EPSG:3006", [lon, lat]);
+  return {
+    x: result[0],
+    y: result[1]
+  };
+}
     initMap();
 
     document.getElementById("fileInput").addEventListener("change", async function(e){
@@ -561,7 +581,7 @@
       );
     }
 
-    function swerefToWGS84Approx(x, y){
+    function swerefToWGS84(x, y){
       const lat = y / 111320;
       const lon = 15 + ((x - 500000) / (111320 * Math.cos(lat * Math.PI / 180)));
       return { lat, lon };
@@ -1135,7 +1155,7 @@
       }
 
       if (coordSystem === "SWEREF99TM") {
-        return swerefToWGS84Approx(x, y);
+        return swerefToWGS84(x, y);
       }
 
       return null;

@@ -580,7 +580,105 @@ function wgs84ToSweref(lat, lon){
         fallback
       );
     }
+function guessUtilityType(layerName, props = {}){
+  const s = `${layerName || ""} ${JSON.stringify(props || {})}`.toLowerCase();
 
+  if (s.includes("fiber")) return "fiber";
+  if (s.includes("el") || s.includes("power") || s.includes("electric")) return "power_cable";
+  if (s.includes("vatten") || s.includes("water")) return "water";
+  if (s.includes("avlopp") || s.includes("spill") || s.includes("sewer")) return "sewer";
+  if (s.includes("dagvatten") || s.includes("storm")) return "stormwater";
+  if (s.includes("gas")) return "gas";
+  if (s.includes("tele") || s.includes("kommunikation")) return "telecom";
+  if (s.includes("sjökabel") || s.includes("subsea") || s.includes("marine cable")) return "subsea_cable";
+  if (s.includes("boj")) return "buoy_line";
+  if (s.includes("grund") || s.includes("shallow")) return "shallow_area";
+  return "unknown";
+}
+
+function guessEnvironment(layerName, props = {}){
+  const s = `${layerName || ""} ${JSON.stringify(props || {})}`.toLowerCase();
+
+  if (
+    s.includes("sjö") ||
+    s.includes("marin") ||
+    s.includes("maritim") ||
+    s.includes("subsea") ||
+    s.includes("hamn") ||
+    s.includes("farled") ||
+    s.includes("boj") ||
+    s.includes("vattenyta")
+  ){
+    return "maritime";
+  }
+
+  return "land";
+}
+
+function guessVerticalRef(environment){
+  return environment === "maritime" ? "sea_surface" : "ground";
+}
+
+function guessRiskClass(utilityType, depthM){
+  if (utilityType === "power_cable" || utilityType === "gas" || utilityType === "subsea_cable") return "high";
+  if (utilityType === "fiber" || utilityType === "water" || utilityType === "sewer") return "medium";
+  if (typeof depthM === "number" && depthM < 0.6) return "high";
+  return "low";
+}
+
+function readDepthM(props = {}, layerName = ""){
+  const candidates = [
+    props.depthM,
+    props.depth,
+    props.djup,
+    props.djup_m,
+    props["depth_m"],
+    props["DEPTH"],
+    props["DEPTH_M"],
+    props["DJUP"],
+    props["DJUP_M"]
+  ];
+
+  for (const v of candidates){
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+
+  const txt = `${layerName || ""} ${JSON.stringify(props || {})}`.toLowerCase();
+
+  const m1 = txt.match(/djup[:= ]\s*(-?\d+(?:[.,]\d+)?)/i);
+  if (m1) return Number(String(m1[1]).replace(",", "."));
+
+  const m2 = txt.match(/depth[:= ]\s*(-?\d+(?:[.,]\d+)?)/i);
+  if (m2) return Number(String(m2[1]).replace(",", "."));
+
+  return null;
+}
+
+function buildMeta(layerName, props = {}){
+  const utilityType = guessUtilityType(layerName, props);
+  const environment = guessEnvironment(layerName, props);
+  const verticalRef = guessVerticalRef(environment);
+  const depthM = readDepthM(props, layerName);
+  const riskClass = guessRiskClass(utilityType, depthM);
+
+  return {
+    name:
+      props.name ||
+      props.NAME ||
+      props.label ||
+      props.LABEL ||
+      layerName ||
+      utilityType ||
+      "Objekt",
+    utilityType,
+    depthM,
+    riskClass,
+    environment,
+    verticalRef
+  };
+}
+    
        function looksLikeSweref99TM(minX, maxX, minY, maxY){
       const xOk = minX >= 150000 && maxX <= 1000000;
       const yOk = minY >= 6000000 && maxY <= 8000000;
@@ -1155,65 +1253,85 @@ function wgs84ToSweref(lat, lon){
       return null;
     }
 
-    function buildInfraResult(features, coordSystem){
-      const out = [];
+   function buildInfraResult(features, coordSystem){
+  const out = [];
 
-      for (const f of features) {
-        if (f.type === "point") {
-          const c = convertXYToLatLon(f.x, f.y, coordSystem);
-          if (!c) continue;
+  for (const f of features) {
+    const meta = buildMeta(f.group, f.properties || {});
 
-          out.push({
-            type: "point",
-            layer: f.group,
-            lat: c.lat,
-            lon: c.lon,
-            properties: f.properties || {}
-          });
-        }
+    if (f.type === "point") {
+      const c = convertXYToLatLon(f.x, f.y, coordSystem);
+      if (!c) continue;
 
-        else if (f.type === "line") {
-          const coords = [];
-          for (const p of f.coordinates || []) {
-            const c = convertXYToLatLon(p.x, p.y, coordSystem);
-            if (c) coords.push({ lat: c.lat, lon: c.lon });
-          }
+      out.push({
+        type: "point",
+        layer: f.group,
+        name: meta.name,
+        utilityType: meta.utilityType,
+        depthM: meta.depthM,
+        riskClass: meta.riskClass,
+        environment: meta.environment,
+        verticalRef: meta.verticalRef,
+        lat: c.lat,
+        lon: c.lon,
+        properties: f.properties || {}
+      });
+    }
 
-          if (coords.length >= 2) {
-            out.push({
-              type: "line",
-              layer: f.group,
-              coordinates: coords,
-              properties: f.properties || {}
-            });
-          }
-        }
-
-        else if (f.type === "polygon") {
-          const rings = [];
-
-          for (const ring of f.rings || []) {
-            const outRing = [];
-            for (const p of ring) {
-              const c = convertXYToLatLon(p.x, p.y, coordSystem);
-              if (c) outRing.push({ lat: c.lat, lon: c.lon });
-            }
-            if (outRing.length >= 3) rings.push(outRing);
-          }
-
-          if (rings.length) {
-            out.push({
-              type: "polygon",
-              layer: f.group,
-              rings,
-              properties: f.properties || {}
-            });
-          }
-        }
+    else if (f.type === "line") {
+      const coords = [];
+      for (const p of f.coordinates || []) {
+        const c = convertXYToLatLon(p.x, p.y, coordSystem);
+        if (c) coords.push({ lat: c.lat, lon: c.lon });
       }
 
-      return out;
+      if (coords.length >= 2) {
+        out.push({
+          type: "line",
+          layer: f.group,
+          name: meta.name,
+          utilityType: meta.utilityType,
+          depthM: meta.depthM,
+          riskClass: meta.riskClass,
+          environment: meta.environment,
+          verticalRef: meta.verticalRef,
+          coordinates: coords,
+          properties: f.properties || {}
+        });
+      }
     }
+
+    else if (f.type === "polygon") {
+      const rings = [];
+
+      for (const ring of f.rings || []) {
+        const outRing = [];
+        for (const p of ring) {
+          const c = convertXYToLatLon(p.x, p.y, coordSystem);
+          if (c) outRing.push({ lat: c.lat, lon: c.lon });
+        }
+        if (outRing.length >= 3) rings.push(outRing);
+      }
+
+      if (rings.length) {
+        out.push({
+          type: "polygon",
+          layer: f.group,
+          name: meta.name,
+          utilityType: meta.utilityType,
+          depthM: meta.depthM,
+          riskClass: meta.riskClass,
+          environment: meta.environment,
+          verticalRef: meta.verticalRef,
+          rings,
+          properties: f.properties || {}
+        });
+      }
+    }
+  }
+
+  return out;
+}}
 
     function buildRawResult(features){
       return features.map(f => {
@@ -1246,81 +1364,93 @@ function wgs84ToSweref(lat, lon){
     }
 
     function renderMap(geoFeatures){
-      clearMap();
+  clearMap();
 
-      const bounds = [];
-      const layerColors = {};
-      const palette = [
-        "#5ea2ff","#7ad3ff","#7df0c4","#f8c95d",
-        "#ff9d6c","#ff7f9f","#c59cff","#9dff93"
-      ];
+  const bounds = [];
+  const layerColors = {};
+  const palette = [
+    "#5ea2ff","#7ad3ff","#7df0c4","#f8c95d",
+    "#ff9d6c","#ff7f9f","#c59cff","#9dff93"
+  ];
 
-      function getColor(layerName){
-        if (!layerColors[layerName]) {
-          layerColors[layerName] = palette[Object.keys(layerColors).length % palette.length];
-        }
-        return layerColors[layerName];
-      }
+  function getColor(layerName){
+    if (!layerColors[layerName]) {
+      layerColors[layerName] = palette[Object.keys(layerColors).length % palette.length];
+    }
+    return layerColors[layerName];
+  }
 
-      geoFeatures.forEach(f => {
-        const color = getColor(f.layer || "0");
+  function popupHtml(f, geomType){
+    return `
+      <strong>${escapeHtml(f.name || f.layer || "0")}</strong><br>
+      ${geomType}<br>
+      Layer: ${escapeHtml(f.layer || "-")}<br>
+      Typ: ${escapeHtml(f.utilityType || "-")}<br>
+      Djup: ${f.depthM ?? "-"} m<br>
+      Risk: ${escapeHtml(f.riskClass || "-")}<br>
+      Miljö: ${escapeHtml(f.environment || "-")}
+    `;
+  }
 
-        if (f.type === "point") {
-          const latlng = [f.lat, f.lon];
-          bounds.push(latlng);
+  geoFeatures.forEach(f => {
+    const color = getColor(f.layer || "0");
 
-          L.circleMarker(latlng, {
-            radius: 5,
-            color,
-            weight: 2,
-            fillColor: color,
-            fillOpacity: 0.9
-          })
-          .bindPopup(`<strong>${escapeHtml(f.layer || "0")}</strong><br>POINT`)
-          .addTo(mapLayerGroup);
-        }
+    if (f.type === "point") {
+      const latlng = [f.lat, f.lon];
+      bounds.push(latlng);
 
-        else if (f.type === "line") {
-          const latlngs = (f.coordinates || []).map(c => {
-            const ll = [c.lat, c.lon];
-            bounds.push(ll);
-            return ll;
-          });
+      L.circleMarker(latlng, {
+        radius: 5,
+        color,
+        weight: 2,
+        fillColor: color,
+        fillOpacity: 0.9
+      })
+      .bindPopup(popupHtml(f, "POINT"))
+      .addTo(mapLayerGroup);
+    }
 
-          if (latlngs.length >= 2) {
-            L.polyline(latlngs, {
-              color,
-              weight: 3,
-              opacity: 0.9
-            })
-            .bindPopup(`<strong>${escapeHtml(f.layer || "0")}</strong><br>LINE`)
-            .addTo(mapLayerGroup);
-          }
-        }
-
-        else if (f.type === "polygon") {
-          const rings = (f.rings || []).map(ring => ring.map(c => {
-            const ll = [c.lat, c.lon];
-            bounds.push(ll);
-            return ll;
-          }));
-
-          if (rings.length) {
-            L.polygon(rings, {
-              color,
-              weight: 2,
-              fillOpacity: 0.15
-            })
-            .bindPopup(`<strong>${escapeHtml(f.layer || "0")}</strong><br>POLYGON`)
-            .addTo(mapLayerGroup);
-          }
-        }
+    else if (f.type === "line") {
+      const latlngs = (f.coordinates || []).map(c => {
+        const ll = [c.lat, c.lon];
+        bounds.push(ll);
+        return ll;
       });
 
-      if (bounds.length) {
-        map.fitBounds(bounds, { padding:[20,20] });
+      if (latlngs.length >= 2) {
+        L.polyline(latlngs, {
+          color,
+          weight: 3,
+          opacity: 0.9
+        })
+        .bindPopup(popupHtml(f, "LINE"))
+        .addTo(mapLayerGroup);
       }
     }
+
+    else if (f.type === "polygon") {
+      const rings = (f.rings || []).map(ring => ring.map(c => {
+        const ll = [c.lat, c.lon];
+        bounds.push(ll);
+        return ll;
+      }));
+
+      if (rings.length) {
+        L.polygon(rings, {
+          color,
+          weight: 2,
+          fillOpacity: 0.15
+        })
+        .bindPopup(popupHtml(f, "POLYGON"))
+        .addTo(mapLayerGroup);
+      }
+    }
+  });
+
+  if (bounds.length) {
+    map.fitBounds(bounds, { padding:[20,20] });
+  }
+}
 
     function escapeHtml(str){
       return String(str)
